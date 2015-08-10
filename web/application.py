@@ -48,7 +48,9 @@ class application:
         self.fvars = fvars
         self.processors = []
         
+        # processor 运行函数时先运行 self._load  函数
         self.add_processor(loadhook(self._load))
+        # processor 运行函数时后运行 self._unload  函数
         self.add_processor(unloadhook(self._unload))
         
         if autoreload:
@@ -68,8 +70,9 @@ class application:
                     # to be imported using its file name.                    
                     name = main_module_name()
                 return name
-                
+            # urls    
             mapping_name = utils.dictfind(fvars, mapping)
+            # web-1
             module_name = modname(fvars)
             
             def reload_mapping():
@@ -79,9 +82,10 @@ class application:
                 if mapping:
                     self.fvars = mod.__dict__
                     self.init_mapping(mapping)
-
+            # processor 运行函数时先运行 Reloader()
             self.add_processor(loadhook(Reloader()))
             if mapping_name and module_name:
+                # processor 运行函数时先运行 reload_mapping
                 self.add_processor(loadhook(reload_mapping))
 
             # load __main__ module usings its filename, so that it can be reloaded.
@@ -90,10 +94,10 @@ class application:
                     __import__(main_module_name())
                 except ImportError:
                     pass
-                    
+    #进栈                
     def _load(self):
         web.ctx.app_stack.append(self)
-        
+    #出栈    
     def _unload(self):
         web.ctx.app_stack = web.ctx.app_stack[:-1]
         
@@ -268,15 +272,17 @@ class application:
         
         def wsgi(env, start_resp):
             # clear threadlocal to avoid inteference of previous requests
-            self._cleanup()
+            self._cleanup()  #清空之前请求的变量
 
             self.load(env)
             try:
                 # allow uppercase methods only
                 if web.ctx.method.upper() != web.ctx.method:
                     raise web.nomethod()
-
+                # 具体的处理函数
+                # ERROR : volume is not found.
                 result = self.handle_with_processors()
+                # 是否可迭代的
                 if is_generator(result):
                     result = peep(result)
                 else:
@@ -287,6 +293,7 @@ class application:
             result = web.safestr(iter(result))
 
             status, headers = web.ctx.status, web.ctx.headers
+            # LogMiddleware.xstart_response
             start_resp(status, headers)
             
             def cleanup():
@@ -379,7 +386,7 @@ class application:
      
     def load(self, env):
         """Initializes ctx using env."""
-        ctx = web.ctx
+        ctx = web.ctx  # 初始化化ctx ，一个线程安全的字典
         ctx.clear()
         ctx.status = '200 OK'
         ctx.headers = []
@@ -593,7 +600,7 @@ class subdomain_application(application):
             if result: # it's a match
                 return what, [x for x in result.groups()]
         return None, None
-        
+# 生成一个 processor ，processor的参数是要运行的控制函数，这里把 h 函数放在 控制函数之前运行     
 def loadhook(h):
     """
     Converts a load hook into an application processor.

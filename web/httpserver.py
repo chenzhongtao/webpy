@@ -135,6 +135,7 @@ def runbasic(func, server_address=("0.0.0.0", 8080)):
 # Made global so that it can be stopped in embedded mode.
 server = None
 
+#func  = application.wsgifunc.wsgi  
 def runsimple(func, server_address=("0.0.0.0", 8080)):
     """
     Runs [CherryPy][cp] WSGI server hosting WSGI app `func`. 
@@ -143,6 +144,7 @@ def runsimple(func, server_address=("0.0.0.0", 8080)):
     [cp]: http://www.cherrypy.org
     """
     global server
+    # 添加中间键
     func = StaticMiddleware(func)
     func = LogMiddleware(func)
     
@@ -265,12 +267,14 @@ class StaticMiddleware:
         self.prefix = prefix
         
     def __call__(self, environ, start_response):
+        # /ucs/  url中的path
         path = environ.get('PATH_INFO', '')
         path = self.normpath(path)
 
         if path.startswith(self.prefix):
             return StaticApp(environ, start_response)
         else:
+            # application.wsgifunc.wsgi
             return self.app(environ, start_response)
 
     def normpath(self, path):
@@ -296,13 +300,15 @@ class LogMiddleware:
         
         # take log_date_time_string method from BaseHTTPRequestHandler
         self.log_date_time_string = BaseHTTPRequestHandler(FakeSocket(), None, None).log_date_time_string
-        
+    
+    # WSGIGateway.response调用   response = self.req.server.wsgi_app(self.env, self.start_response)   
     def __call__(self, environ, start_response):
         def xstart_response(status, response_headers, *args):
+            #WSGIGateway.start_response
             out = start_response(status, response_headers, *args)
             self.log(status, environ)
             return out
-
+        # 调用StaticMiddleware.__call__
         return self.app(environ, xstart_response)
              
     def log(self, status, environ):

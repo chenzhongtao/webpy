@@ -169,28 +169,31 @@ def read_headers(rfile, hdict=None):
             raise ValueError("Illegal end of headers.")
         
         if line == CRLF:
-            # Normal end of headers
+            # Normal end of headers  请求首部是以CRLF行结尾
             break
         if not line.endswith(CRLF):
             raise ValueError("HTTP requires CRLF terminators")
         
         if line[0] in ' \t':
-            # It's a continuation line.
+            # It's a continuation line.  连续行
             v = line.strip()
         else:
             try:
+                # 把line按照":"分割成k, v，譬如 Host:baidu.com就被分割成Host和baidu.com两部分
                 k, v = line.split(":", 1)
             except ValueError:
                 raise ValueError("Illegal header line.")
             # TODO: what about TE and WWW-Authenticate?
+            # 格式化分割后的
             k = k.strip().title()
             v = v.strip()
             hname = k
-        
+        # HTTP协议中的有些请求头允许重复(譬如Accept等等)，那么webpy就会把这些相同头的value用","连接起来  
         if k in comma_separated_headers:
             existing = hdict.get(hname)
             if existing:
                 v = ", ".join((existing, v))
+        # 把请求头k, v存入hdict
         hdict[hname] = v
     
     return hdict
@@ -526,8 +529,9 @@ class HTTPRequest(object):
     def parse_request(self):
         """Parse the next HTTP request start-line and message-headers."""
         self.rfile = SizeCheckWrapper(self.conn.rfile,
-                                      self.server.max_request_header_size)
+                                      self.server.max_request_header_size) #0
         try:
+            # 读取请求起始行 
             self.read_request_line()
         except MaxSizeExceeded:
             self.simple_response("414 Request-URI Too Long",
@@ -536,6 +540,7 @@ class HTTPRequest(object):
             return
         
         try:
+            # 读取请求首部
             success = self.read_request_headers()
         except MaxSizeExceeded:
             self.simple_response("413 Request Entity Too Large",
@@ -556,6 +561,8 @@ class HTTPRequest(object):
         # and doesn't need the client to request or acknowledge the close
         # (although your TCP stack might suffer for it: cf Apache's history
         # with FIN_WAIT_2).
+        # 从socket中读取一行数据
+        # GET /ucs/ HTTP/1.1\r\n
         request_line = self.rfile.readline()
         
         # Set started_request to True so communicate() knows to send 408
@@ -581,7 +588,10 @@ class HTTPRequest(object):
             return
         
         try:
+            # 按照HTTP协议规范，把request_line分割成请求方法(method)，uri路径(uri)，HTTP协议版本(req_protocol)
+            # GET /ucs/ HTTP/1.1
             method, uri, req_protocol = request_line.strip().split(" ", 2)
+            #(1, 1)
             rp = int(req_protocol[5]), int(req_protocol[7])
         except (ValueError, IndexError):
             self.simple_response("400 Bad Request", "Malformed Request-Line")
@@ -599,7 +609,7 @@ class HTTPRequest(object):
         
         if scheme:
             self.scheme = scheme
-        
+        # 获取uri请求参数
         qs = ''
         if '?' in path:
             path, qs = path.split('?', 1)
@@ -648,11 +658,12 @@ class HTTPRequest(object):
         
         # then all the http headers
         try:
+            # 读取请求头，inheaders是一个dict
             read_headers(self.rfile, self.inheaders)
         except ValueError, ex:
             self.simple_response("400 Bad Request", ex.args[0])
             return False
-        
+        # 0
         mrbs = self.server.max_request_body_size
         if mrbs and int(self.inheaders.get("Content-Length", 0)) > mrbs:
             self.simple_response("413 Request Entity Too Large",
@@ -662,7 +673,7 @@ class HTTPRequest(object):
         
         # Persistent connection support
         if self.response_protocol == "HTTP/1.1":
-            # Both server and client are HTTP/1.1
+            # Both server and client are HTTP/1.1 
             if self.inheaders.get("Connection", "") == "close":
                 self.close_connection = True
         else:
@@ -759,6 +770,7 @@ class HTTPRequest(object):
     
     def respond(self):
         """Call the gateway and write its iterable output."""
+        # 0
         mrbs = self.server.max_request_body_size
         if self.chunked_read:
             self.rfile = ChunkedRFile(self.conn.rfile, mrbs)
@@ -771,7 +783,7 @@ class HTTPRequest(object):
                         "allowed bytes.")
                 return
             self.rfile = KnownLengthRFile(self.conn.rfile, cl)
-        
+        # 把请求交给gateway响应
         self.server.gateway(self).respond()
         
         if (self.ready and not self.sent_headers):
@@ -1209,29 +1221,37 @@ class HTTPConnection(object):
     remote_addr = None
     remote_port = None
     ssl_env = None
-    rbufsize = DEFAULT_BUFFER_SIZE
+    rbufsize = DEFAULT_BUFFER_SIZE # -1
     wbufsize = DEFAULT_BUFFER_SIZE
     RequestHandlerClass = HTTPRequest
     
     def __init__(self, server, sock, makefile=CP_fileobject):
-        self.server = server
-        self.socket = sock
+        self.server = server # HTTPServer
+        self.socket = sock  #客户端和服务器建立的
+        # 把socket对象包装成类File对象，使得对socket读写就像对File对象读写一样简单
         self.rfile = makefile(sock, "rb", self.rbufsize)
         self.wfile = makefile(sock, "wb", self.wbufsize)
         self.requests_seen = 0
     
+    # 线程工作者调用这个函数
     def communicate(self):
         """Read each request and respond appropriately."""
         request_seen = False
         try:
             while True:
+                import pdb
+                pdb.set_trace()
+                from dbgp.client import brk
+                brk(host="191.168.45.215", port=49530)
                 # (re)set req to None so that if something goes wrong in
                 # the RequestHandlerClass constructor, the error doesn't
                 # get written to the previous request.
                 req = None
+                # 把HTTPConnection对象包装成一个HTTPRequest对象
                 req = self.RequestHandlerClass(self.server, self)
                 
                 # This order of operations should guarantee correct pipelining.
+                # 解析HTTP请求
                 req.parse_request()
                 if self.server.stats['Enabled']:
                     self.requests_seen += 1
@@ -1242,6 +1262,7 @@ class HTTPConnection(object):
                     return
                 
                 request_seen = True
+                # 响应HTTP请求
                 req.respond()
                 if req.close_connection:
                     return
@@ -1362,16 +1383,20 @@ class WorkerThread(threading.Thread):
     def run(self):
         self.server.stats['Worker Threads'][self.getName()] = self.stats
         try:
+            # 线程被调度运行，ready状态位设置为True
             self.ready = True
             while True:
-                conn = self.server.requests.get()
+                # 尝试从消息队列中获取一个obj 
+                conn = self.server.requests.get()#函数会阻塞
+                # 如果这个obj是一个“退出标记”对象，线程则退出运行
                 if conn is _SHUTDOWNREQUEST:
                     return
-                
+                # 否则该obj是一个HTTPConnection对象，那么线程则处理该请求
                 self.conn = conn
                 if self.server.stats['Enabled']:
                     self.start_time = time.time()
                 try:
+                    # 处理 HTTPConnection
                     conn.communicate()
                 finally:
                     conn.close()
@@ -1385,7 +1410,7 @@ class WorkerThread(threading.Thread):
         except (KeyboardInterrupt, SystemExit), exc:
             self.server.interrupt = exc
 
-
+#线程池
 class ThreadPool(object):
     """A Request Queue for the CherryPyWSGIServer which pools threads.
     
@@ -1394,20 +1419,28 @@ class ThreadPool(object):
     """
     
     def __init__(self, server, min=10, max=-1):
-        self.server = server
-        self.min = min
-        self.max = max
+        # server实例
+        self.server = server # CherryPyWSGIServer
+        self.min = min # 10
+        self.max = max # -1
+        # 线程池中的线程实例集合（list）
         self._threads = []
-        self._queue = Queue.Queue()
-        self.get = self._queue.get
+        # 消息队列（Queue是一个线程安全队列）
+        self._queue = Queue.Queue() # 创建一个队列，长度无穷
+        # 编程技巧，用来简化代码，等价于：  
+        # def get(self)  
+        #    return self._queue.get() 
+        self.get = self._queue.get  # get函数为从队列取一个对象
     
+    # 启动线程池
     def start(self):
         """Start the pool of threads."""
+        # 创建min个WorkThread并启动
         for i in range(self.min):
             self._threads.append(WorkerThread(self.server))
         for worker in self._threads:
             worker.setName("CP Server " + worker.getName())
-            worker.start()
+            worker.start()# 就是运行WorkerThread.run
         for worker in self._threads:
             while not worker.ready:
                 time.sleep(.1)
@@ -1417,6 +1450,7 @@ class ThreadPool(object):
         return len([t for t in self._threads if t.conn is None])
     idle = property(_get_idle, doc=_get_idle.__doc__)
     
+    # 把obj(通常是一个HTTPConnection对象)放入消息队列
     def put(self, obj):
         self._queue.put(obj)
         if obj is _SHUTDOWNREQUEST:
@@ -1431,16 +1465,19 @@ class ThreadPool(object):
             worker.setName("CP Server " + worker.getName())
             self._threads.append(worker)
             worker.start()
-    
+   
+    # kill掉amount个线程 
     def shrink(self, amount):
         """Kill off worker threads (not below self.min)."""
         # Grow/shrink the pool if necessary.
         # Remove any dead threads from our list
+        # 1.kill掉已经不在运行的线程
         for t in self._threads:
             if not t.isAlive():
                 self._threads.remove(t)
                 amount -= 1
-        
+        # 2.如果已经kill掉线程数小于amount，则在消息队列中放入线程退出标记对象_SHUTDOWNREQUEST  
+        # 当线程从消息队列中取到的不是一个HTTPConnection对象，而是一个_SHUTDOWNREQUEST，则退出运行  
         if amount > 0:
             for i in range(min(amount, len(self._threads) - self.min)):
                 # Put a number of shutdown requests on the queue equal
@@ -1679,6 +1716,7 @@ class HTTPServer(object):
         
         For UNIX sockets, supply the filename as a string.""")
     
+    # 启动一个网络服务器
     def start(self):
         """Run the server forever."""
         # We don't have to trap KeyboardInterrupt or SystemExit here,
@@ -1687,8 +1725,9 @@ class HTTPServer(object):
         # trap those exceptions in whatever code block calls start().
         self._interrupt = None
         
+        # CherryPy/3.2.0 Server
         if self.software is None:
-            self.software = "%s Server" % self.version
+            self.software = "%s Server" % self.version # CherryPy/3.2.0 Server
         
         # SSL backward compatibility
         if (self.ssl_adapter is None and
@@ -1710,6 +1749,7 @@ class HTTPServer(object):
                     getattr(self, 'ssl_certificate_chain', None))
         
         # Select the appropriate socket
+        # 如果bind_addr是一个字符串（文件名），那么采用unix domain协议
         if isinstance(self.bind_addr, basestring):
             # AF_UNIX socket
             
@@ -1723,13 +1763,17 @@ class HTTPServer(object):
             
             info = [(socket.AF_UNIX, socket.SOCK_STREAM, 0, "", self.bind_addr)]
         else:
+             # 否则采用TCP/IP协议
             # AF_INET or AF_INET6 socket
             # Get the correct address family for our host (allows IPv6 addresses)
+            # 0.0.0.0 8080
             host, port = self.bind_addr
             try:
+                # [(2, 1, 6, '', ('0.0.0.0', 8080))]
                 info = socket.getaddrinfo(host, port, socket.AF_UNSPEC,
                                           socket.SOCK_STREAM, 0, socket.AI_PASSIVE)
             except socket.gaierror:
+                # ipv6地址
                 if ':' in self.bind_addr[0]:
                     info = [(socket.AF_INET6, socket.SOCK_STREAM,
                              0, "", self.bind_addr + (0, 0))]
@@ -1740,7 +1784,8 @@ class HTTPServer(object):
         self.socket = None
         msg = "No socket could be created"
         for res in info:
-            af, socktype, proto, canonname, sa = res
+            # 循环测试 getaddrinfo函数返回值，直到有一个bind成功或是遍历完所有结果集
+            af, socktype, proto, canonname, sa = res #(2, 1, 6, '', ('0.0.0.0', 8000))
             try:
                 self.bind(af, socktype, proto)
             except socket.error:
@@ -1753,7 +1798,9 @@ class HTTPServer(object):
             raise socket.error(msg)
         
         # Timeout so KeyboardInterrupt can be caught on Win32
+        # 设置阻塞套接字的超时时间
         self.socket.settimeout(1)
+        #开始tcp监听
         self.socket.listen(self.request_queue_size)
         
         # Create worker threads
@@ -1761,6 +1808,7 @@ class HTTPServer(object):
         
         self.ready = True
         self._start_time = time.time()
+        #主线程循环
         while self.ready:
             self.tick()
             if self.interrupt:
@@ -1769,13 +1817,17 @@ class HTTPServer(object):
                     time.sleep(0.1)
                 if self.interrupt:
                     raise self.interrupt
-    
+    # 2, 1, 6
     def bind(self, family, type, proto=0):
         """Create (or recreate) the actual socket object."""
+        # 创建socket 
         self.socket = socket.socket(family, type, proto)
+        # 设置文件描述符参数fcntl.FD_CLOEXEC
         prevent_socket_inheritance(self.socket)
+        # 设置socket选项(允许在TIME_WAIT状态下，bind相同的地址) 
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if self.nodelay and not isinstance(self.bind_addr, str):
+            #设置TCP_NODELAY参数
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         
         if self.ssl_adapter is not None:
@@ -1791,22 +1843,27 @@ class HTTPServer(object):
                 # Apparently, the socket option is not available in
                 # this machine's TCP stack
                 pass
-        
+        # socket bind 
         self.socket.bind(self.bind_addr)
-    
+        
+    # HTTPSever核心函数 
     def tick(self):
         """Accept a new connection and put it on the Queue."""
         try:
+            # 接受一个TCP连接
+            # 新的套接字 和 客户端地址
             s, addr = self.socket.accept()
             if self.stats['Enabled']:
                 self.stats['Accepts'] += 1
             if not self.ready:
                 return
             
+            # 设置文件描述符参数fcntl.FD_CLOEXEC
             prevent_socket_inheritance(s)
             if hasattr(s, 'settimeout'):
                 s.settimeout(self.timeout)
-            
+                
+            # 把外部连接封装成一个HTTPConnection对象
             makefile = CP_fileobject
             ssl_env = {}
             # if ssl cert and key are set, we try to be a secure HTTP server
@@ -1852,7 +1909,7 @@ class HTTPServer(object):
                 conn.remote_port = addr[1]
             
             conn.ssl_env = ssl_env
-            
+            # 然后把该HTTPConnection对象放入线程池中的消息队列里
             self.requests.put(conn)
         except socket.timeout:
             # The only reason for the timeout in start() is so we can
@@ -1974,26 +2031,35 @@ def get_ssl_adapter_class(name='pyopenssl'):
 
 # -------------------------------- WSGI Stuff -------------------------------- #
 
+#In [18]: 2 or 1
+#Out[18]: 2
+#
+#In [19]: 0 or 1
+#Out[19]: 1
 
+# 继承HTTPServer
 class CherryPyWSGIServer(HTTPServer):
     
     wsgi_version = (1, 0)
     
     def __init__(self, bind_addr, wsgi_app, numthreads=10, server_name=None,
                  max=-1, request_queue_size=5, timeout=10, shutdown_timeout=5):
+        # 线程池(用来处理外部请求)
         self.requests = ThreadPool(self, min=numthreads or 1, max=max)
-        self.wsgi_app = wsgi_app
-        self.gateway = wsgi_gateways[self.wsgi_version]
-        
-        self.bind_addr = bind_addr
-        if not server_name:
+        # 线程池(用来处理外部请求，稍后详述)
+        self.wsgi_app = wsgi_app  #web.httpserver.LogMiddleware instance
+        # wsgi网关（http_request ->wsgi_gateway ->webpy/webapp)
+        self.gateway = wsgi_gateways[self.wsgi_version] #<class 'web.wsgiserver.WSGIGateway_10'>
+        # wsgi_server监听地址 
+        self.bind_addr = bind_addr #('0.0.0.0', 8000)
+        if not server_name:  # localhost
             server_name = socket.gethostname()
         self.server_name = server_name
-        self.request_queue_size = request_queue_size
+        self.request_queue_size = request_queue_size #5
         
-        self.timeout = timeout
-        self.shutdown_timeout = shutdown_timeout
-        self.clear_stats()
+        self.timeout = timeout #10
+        self.shutdown_timeout = shutdown_timeout #5
+        self.clear_stats() #HTTPServer。
     
     def _get_numthreads(self):
         return self.requests.min
@@ -2005,18 +2071,23 @@ class CherryPyWSGIServer(HTTPServer):
 class WSGIGateway(Gateway):
     
     def __init__(self, req):
-        self.req = req
+        self.req = req # HTTPRequest对象
         self.started_response = False
         self.env = self.get_environ()
         self.remaining_bytes_out = None
-    
+        
+    # 获取wsgi的环境变量(留给子类实现)  
     def get_environ(self):
         """Return a new environ dict targeting the given wsgi.version"""
         raise NotImplemented
     
     def respond(self):
+        # -----------------------------------  
+        # 按照 WSGI 规范调用我们得 webapp/webpy  
+        # -----------------------------------  
         response = self.req.server.wsgi_app(self.env, self.start_response)
         try:
+            # 把处理结果写回给客户端
             for chunk in response:
                 # "The start_response callable must not actually transmit
                 # the response headers. Instead, it must store them for the
@@ -2039,6 +2110,7 @@ class WSGIGateway(Gateway):
         if self.started_response and not exc_info:
             raise AssertionError("WSGI start_response called a second "
                                  "time with no exc_info.")
+        # 开始响应
         self.started_response = True
         
         # "if exc_info is provided, and the HTTP headers have already been
@@ -2058,6 +2130,7 @@ class WSGIGateway(Gateway):
                 raise TypeError("WSGI response header value %r is not a byte string." % v)
             if k.lower() == 'content-length':
                 self.remaining_bytes_out = int(v)
+        # 先把header保存在这里
         self.req.outheaders.extend(headers)
         
         return self.write
@@ -2086,8 +2159,9 @@ class WSGIGateway(Gateway):
         
         if not self.req.sent_headers:
             self.req.sent_headers = True
+            # 写http响应头
             self.req.send_headers()
-        
+        # 写http响应体
         self.req.write(chunk)
         
         if rbo is not None:
@@ -2101,6 +2175,7 @@ class WSGIGateway_10(WSGIGateway):
     
     def get_environ(self):
         """Return a new environ dict targeting the given wsgi.version"""
+        # build WSGI环境变量(req中的这些属性，都是通过HTTPRequest.prase_request解析HTTP请求获得的)  
         req = self.req
         env = {
             # set a non-standard environ entry so the WSGI app can know what
@@ -2135,6 +2210,10 @@ class WSGIGateway_10(WSGIGateway):
             env["SERVER_PORT"] = str(req.server.bind_addr[1])
         
         # Request headers
+        # 请求头
+        #(Pdb) print req.inheaders
+        # {'Host': '191.168.45.74:8000', 'Accept': '*/*', 'User-Agent': 'curl/7.19.7 (x86_64-redhat-linux-gnu) libcurl/7.19.7 NSS/3.15.3 zlib/1.2.3 libidn/1.18 libssh2/1.4.2'}
+
         for k, v in req.inheaders.iteritems():
             env["HTTP_" + k.upper().replace("-", "_")] = v
         

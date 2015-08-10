@@ -1,0 +1,31 @@
+<Storage>cluster smb securitymode ads set netbios=nasteam pdcname=win93.nasteam.com pdcip=191.168.64.193 bdcname= bdcip= description= adminname=administrator password=passwd.123 interface=eth1 
+
+
+
+import sys,ldap
+host = 'ldap://191.168.64.193'
+con = ldap.initialize(host)
+BIND_DN = "administrator@nasteam.com"
+BIND_PASS = "passwd.123"
+con.set_option( ldap.OPT_X_TLS_DEMAND, True )
+con.set_option( ldap.OPT_DEBUG_LEVEL, 255 )
+con.bind_s(BIND_DN,BIND_PASS)
+con.protocal_version = ldap.VERSION3 
+searchScope = ldap.SCOPE_SUBTREE 
+user_dn = "dc=nasteam,dc=com"
+con.search_s(user_dn,searchScope,"(cn=*)")
+
+
+con.result(id) 
+
+
+
+host = 'ldap://191.168.64.193'
+dn = 'CN=chenzhongtao,CN=Users,DC=nasteam,DC=com'
+my_ldap = ldap.initialize(host)
+my_ldap.simple_bind_s(dn,Password)
+
+
+
+host = ''
+

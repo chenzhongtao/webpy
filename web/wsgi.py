@@ -20,7 +20,7 @@ def runscgi(func, addr=('localhost', 4000)):
     """Runs a WSGI function as an SCGI server."""
     import flup.server.scgi as flups
     return flups.WSGIServer(func, bindAddress=addr, debug=False).run()
-
+#func  = application.wsgifunc.wsgi
 def runwsgi(func):
     """
     Runs a WSGI-compatible `func` using FCGI, SCGI, or a simple web server,
@@ -51,7 +51,7 @@ def runwsgi(func):
         else:
             return runscgi(func)
     
-    
+    # ('0.0.0.0', 8080)
     server_addr = validip(listget(sys.argv, 1, ''))
     if os.environ.has_key('PORT'): # e.g. Heroku
         server_addr = ('0.0.0.0', intget(os.environ['PORT']))
