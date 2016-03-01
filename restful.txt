@@ -1,0 +1,30 @@
+connection = httplib.HTTPConnection("191.168.45.74", 8000,  False, 3)
+connection.connect()
+connection.request("POST","/cloud/testconnect")
+res = connection.getresponse()
+body_str = res.read()
+print body_str
+print res.status
+
+
+
+
+
+curl -k -i -X GET   http://191.168.45.74:8000/ucs/test-dht/     查看一个目录
+
+curl -k -i -X GET   http://191.168.45.74:8000/ucs/test-dht/123  查看一个文件
+
+curl -k  -X GET   http://191.168.45.74:8000/ucs/test-dht/123?download=true > /tmp/swift_download  下载一个文件
+
+curl -k -i -X PUT -T "/root/123.conf"  http://191.168.45.74:8000/ucs/test-dht/123.conf   上传一个文件
+
+curl -k -i -X POST   http://191.168.45.74:8000/ucs/test-dht/newdir/       新建一个目录
+
+curl -k -i -X DELETE  http://191.168.45.74:8000/ucs/test-dht/swift.conf   删除一个文件或目录
+
+
+
+curl -k -i -X GET -u test_ftp:12345678 http://191.168.45.106:8000/ucs/Volume-0001/
+curl -k -i -X DELETE  -u test_smb:12345678 http://191.168.45.106:8000/ucs/Volume-0001/test_1/new_dir
+
+curl -k -i -X GET  http://root:passwd@191.168.45.74:8000/ucs/test-dht/123;Content-Type=test/plain?download=true
